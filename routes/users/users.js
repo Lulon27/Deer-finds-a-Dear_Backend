@@ -152,14 +152,9 @@ class RegProcessor
         });
     }
 
-    get errorList()
-    {
-        return this.err_msgs;
-    }
-
     get hasErrors()
     {
-        return this.err_msgs.length > 0;
+        return this.responseBuilder.error;
     }
 
     makeErrorJSON()

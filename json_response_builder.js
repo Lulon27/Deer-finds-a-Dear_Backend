@@ -33,6 +33,11 @@ class JSONResponseBuilder
         this.body.error = error;
     }
 
+    get error()
+    {
+        return this.body.error;
+    }
+
     get()
     {
         return this.body;
