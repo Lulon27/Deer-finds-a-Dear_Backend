@@ -102,3 +102,7 @@ dist
 
 # TernJS port file
 .tern-port
+
+# Keys used for JWT
+id_rsa_priv.pem
+id_rsa_pub.pem
