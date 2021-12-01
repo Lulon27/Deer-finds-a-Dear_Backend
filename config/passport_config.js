@@ -14,12 +14,10 @@ const passportJwtOptions =
     algorithms: ['RS256']
 };
 
-const strategy = new JwtStrategy(passportJwtOptions, (payload, done) =>
+const strategy = new JwtStrategy(passportJwtOptions, async (payload, done) =>
 {
-    database.getUserByEmail(payload.sub, database.passport_err_handler(done), (rows) =>
-    {
-        return done(null, rows.length > 0);
-    });
+    const rows = await database.getUserByEmail(payload.sub, database.passport_err_handler(done));
+    return done(null, rows.length > 0)
 });
 
 function initializePassport(passport)

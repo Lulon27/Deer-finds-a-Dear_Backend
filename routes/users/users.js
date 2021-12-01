@@ -10,11 +10,12 @@ const Validator = require('../../validator');
 
 const router = express.Router()
 
-router.get('/', passport.authenticate('jwt', {session: false}), (req, res) =>
+router.get('/', passport.authenticate('jwt', {session: false}), async (req, res) =>
 {
     try
     {
-        database.getUsers(database.default_err_handler(res), (rows) => Responses.sendResponseWithField(res, Responses.OK, 'rows', rows));
+        rows = await database.getUsers(database.default_err_handler(res));
+        Responses.sendResponseWithField(res, Responses.OK, 'rows', rows);
     }
     catch(e)
     {
@@ -23,7 +24,7 @@ router.get('/', passport.authenticate('jwt', {session: false}), (req, res) =>
     }
 })
 
-router.post('/', (req, res) =>
+router.post('/', async (req, res) =>
 {
     try
     {
@@ -48,15 +49,13 @@ router.post('/', (req, res) =>
             return;
         }
 
-        database.getUserByEmail(req.body.email, database.default_err_handler(res), (rows) =>
+        const isRegistered = await database.isUserRegistered(req.body.email, database.default_err_handler(res))
+        if (isRegistered)
         {
-            if (rows !== undefined && rows.length > 0)
-            {
-                Responses.sendResponse(res, Responses.EMAIL_ALREADY_REGISTERED, req.body.email);
-                return;
-            }
-            registerUser(req.body, res);
-        });
+            Responses.sendResponse(res, Responses.EMAIL_ALREADY_REGISTERED, req.body.email);
+            return;
+        }
+        registerUser(req.body, res);
     }
     catch(e)
     {
@@ -70,6 +69,8 @@ async function registerUser(body, res)
     const salt = await bcrypt.genSalt()
     const hashedPassword = await bcrypt.hash(body.password, salt)
 
+    const profile_id = await database.newProfile(database.default_err_handler(res));
+
     database.newUser(
         body.email,
         hashedPassword,
@@ -77,13 +78,11 @@ async function registerUser(body, res)
         body.first_name,
         body.last_name,
         new Date(body.date_of_birth).toISOString().split('T')[0],
-        database.default_err_handler(res),
-        (rows) => 
-        {
-            const jwt = jwt_util.makeJWT(body.email);
-            Responses.sendResponseWithField(res, Responses.CREATED, 'jwt', jwt);
-        }
-    );
+        profile_id,
+        database.default_err_handler(res));
+    
+    const jwt = jwt_util.makeJWT(body.email);
+    Responses.sendResponseWithField(res, Responses.CREATED, 'jwt', jwt);
 }
 
 async function logInUser(body, res, user)
@@ -107,16 +106,14 @@ async function logInUser(body, res, user)
     }
 }
 
-router.post('/login', (req, res) =>
+router.post('/login', async (req, res) =>
 {
-    database.getUserByEmail(req.body.email, database.default_err_handler(res), (rows) =>
+    const rows = await database.getUserByEmail(req.body.email, database.default_err_handler(res));
+    if (rows === undefined || rows.length == 0)
     {
-        if (rows === undefined || rows.length == 0)
-        {
-            Responses.sendResponse(res, Responses.INVALID_CREDENTIALS);
-            return;
-        }
-        logInUser(req.body, res, rows[0]);
-    });
+        Responses.sendResponse(res, Responses.INVALID_CREDENTIALS);
+        return;
+    }
+    logInUser(req.body, res, rows[0]);
 })
 module.exports = router;

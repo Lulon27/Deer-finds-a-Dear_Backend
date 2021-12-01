@@ -71,61 +71,66 @@ function passport_err_handler(done)
     return new PassportErrorHandler(done);
 }
 
-function doQuery(query, errorHandler, then_callback)
+async function doQuery(query, values, errorHandler)
 {
-    if(then_callback === undefined)
+    try
     {
-        throw new Error("then_callback cannot be undefined");
+        const result = await db_connect_pool.query(query, values);
+        return result;
     }
-    if(errorHandler === undefined)
+    catch(err)
     {
-        throw new Error("errorHandler cannot be undefined");
+        if(errorHandler !== undefined)
+        {
+            errorHandler.catch_callback(err);
+        }
     }
-    db_connect_pool.query(query).then((rows) =>
-    {
-        then_callback(rows);
-    }).catch((err) =>
-    {
-        errorHandler.catch_callback(err);
-    });
 }
 
-function getUsers(errorHandler, then_callback)
+function getUsers(errorHandler)
 {
-    doQuery('SELECT * FROM customer;', errorHandler, then_callback);
+    return doQuery('SELECT * FROM customer LIMIT 200', [], errorHandler);
 }
 
-function getUserByEmail(email, errorHandler, then_callback)
+function getUserByEmail(email, errorHandler)
+{
+    return doQuery('SELECT * FROM customer WHERE email = ? LIMIT 1',
+    [email],
+    errorHandler);
+}
+
+async function isUserRegistered(email, errorHandler)
+{
+    const rows = await doQuery('SELECT email FROM customer WHERE email = ? LIMIT 1',
+    [email],
+    errorHandler);
+    return rows !== undefined && rows.length !== undefined && rows.length > 0;
+}
+
+function newUser(email, pw, phone, firstName, lastName, dob, profile_id, errorHandler)
 {
     doQuery(
-    `
-    SELECT * FROM customer WHERE email = '${email}' LIMIT 1
-    `,
-    errorHandler, then_callback);
+    `INSERT INTO customer
+    (email, password, phone_number, first_name, last_name, date_of_birth, profile_id)
+    VALUES(?, ?, ?, ?, ?, ?, ?)`,
+    [email, pw, phone ,firstName, lastName, dob, profile_id],
+    errorHandler);
 }
 
-function newUser(email, pw, phone, firstName, lastName, dob, errorHandler, then_callback)
+async function newProfile(errorHandler)
 {
-    doQuery(
-    `
-    INSERT INTO customer
-    (email, password, phone_number, first_name, last_name, date_of_birth)
-    VALUES(
-        '${email}',
-        '${pw}',
-        '${phone}',
-        '${firstName}',
-        '${lastName}',
-        '${dob}'
-    )
-    `,
-    errorHandler, then_callback);
+    const result = await doQuery('INSERT INTO profile_customer VALUES()', errorHandler);
+    return result.insertId;
 }
 
 module.exports.getPool = getPool;
+
 module.exports.getUsers = getUsers;
 module.exports.getUserByEmail = getUserByEmail;
+module.exports.isUserRegistered = isUserRegistered;
 module.exports.newUser = newUser;
+module.exports.newProfile = newProfile;
+
 module.exports.default_err_handler = default_err_handler;
 module.exports.function_err_handler = function_err_handler;
 module.exports.passport_err_handler = passport_err_handler;
