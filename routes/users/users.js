@@ -76,7 +76,7 @@ async function registerUser(body, res)
         body.phone_number,
         body.first_name,
         body.last_name,
-        '1970-01-01',
+        new Date(body.date_of_birth).toISOString().split('T')[0],
         database.default_err_handler(res),
         (rows) => 
         {
