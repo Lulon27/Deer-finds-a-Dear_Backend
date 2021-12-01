@@ -17,7 +17,7 @@ function makeJWT(sub)
     }
     const jwt =
     {
-        token: 'Bearer ' + jsonwebtoken.sign(payload, PRIV_KEY, jwtOptions),
+        token: 'JWT ' + jsonwebtoken.sign(payload, PRIV_KEY, jwtOptions),
         expiresIn: expiresIn
     };
     return jwt;

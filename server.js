@@ -9,6 +9,7 @@ const passport_config = require('./config/passport_config');
 //Routers
 const indexRouter = require('./routes/index');
 const usersRouter = require('./routes/users/users');
+const profileRouter = require('./routes/profile/profile');
 
 const app = express();
 passport_config.initializePassport(passport);
@@ -25,5 +26,6 @@ app.use(passport.initialize());
 //Add routers
 app.use('/', indexRouter)
 app.use('/users', usersRouter);
+app.use('/profile', profileRouter);
 
 app.listen(process.env.PORT);
