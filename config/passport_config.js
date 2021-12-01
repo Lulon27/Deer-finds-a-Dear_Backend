@@ -1,4 +1,5 @@
 const server = require('../server');
+const database = require('../database');
 const fs = require('fs');
 
 const JwtStrategy = require('passport-jwt').Strategy;
@@ -15,11 +16,10 @@ const passportJwtOptions =
 
 const strategy = new JwtStrategy(passportJwtOptions, (payload, done) =>
 {
-    server.getDatabasePool().query(`SELECT password FROM customer WHERE email='${payload.sub}' LIMIT 1`).then(async (rows) =>
+    database.getUserByEmail(payload.sub, database.passport_err_handler(done), (rows) =>
     {
         return done(null, rows.length > 0);
-    })
-    .catch(err => done(err, null));
+    });
 });
 
 function initializePassport(passport)
