@@ -10,11 +10,11 @@ const Validator = require('../../validator');
 
 const router = express.Router()
 
-router.get('/', passport.authenticate('jwt', {session: false}), async (req, res) =>
+router.get('/', async (req, res) =>
 {
     try
     {
-        rows = await database.getUsers(database.default_err_handler(res));
+        rows = await database.getUsersWithProfiles(database.default_err_handler(res));
         Responses.sendResponseWithField(res, Responses.OK, 'rows', rows);
     }
     catch(e)
@@ -82,7 +82,11 @@ async function registerUser(body, res)
         database.default_err_handler(res));
     
     const jwt = jwt_util.makeJWT(body.email);
-    Responses.sendResponseWithField(res, Responses.CREATED, 'jwt', jwt);
+    Responses.sendResponseWithField(res, Responses.CREATED, 'user',
+    {
+        profile_id: profile_id,
+        jwt: jwt
+    });
 }
 
 async function logInUser(body, res, user)
@@ -92,7 +96,11 @@ async function logInUser(body, res, user)
         if(await bcrypt.compare(body.password, user.password))
         {
             const jwt = jwt_util.makeJWT(body.email);
-            Responses.sendResponseWithField(res, Responses.OK, 'jwt', jwt);
+            Responses.sendResponseWithField(res, Responses.OK, 'user',
+            {
+                profile_id: user.profile_id,
+                jwt: jwt
+            });
         }
         else
         {
@@ -116,4 +124,29 @@ router.post('/login', async (req, res) =>
     }
     logInUser(req.body, res, rows[0]);
 })
+
+router.get('/:profile_id', passport.authenticate('jwt', {session: false}), async (req, res) =>
+{
+    const requestID = req.user.profile_id;
+    const targetID = req.params.profile_id;
+
+    let visitedUser;
+    
+    if(requestID == targetID) 
+    {
+        visitedUser = await database.getUserByProfileIDHome(targetID, database.default_err_handler(res));
+    }
+    else
+    {
+        visitedUser = await database.getUserByProfileIDGuest(targetID, database.default_err_handler(res));
+    }
+    if(visitedUser === undefined || visitedUser.length == 0)
+    {
+        Responses.sendResponse(res, Responses.USER_NOT_FOUND, targetID);
+        return;
+    }
+    
+    Responses.sendResponseWithField(res, Responses.OK, "user", visitedUser);
+});
+
 module.exports = router;

@@ -7,6 +7,7 @@ class Responses
     static INTERNAL_ERROR = new Responses(true, 1, 500, 'Internal server error', 'error.internal_server_error');
     static INVALID_CREDENTIALS = new Responses(true, 3, 401, 'Invalid credentials', 'validation.invalid_credentials');
     static EMAIL_ALREADY_REGISTERED = new Responses(true, 1, 409, '{0} is already registered.', 'validation.email_taken');
+    static USER_NOT_FOUND = new Responses(true, 1, 404, 'User with profile_id {0} does not exist.', 'user.not_found');
 
     constructor(error, internalCode, httpCode, debugStr, translStr)
     {
