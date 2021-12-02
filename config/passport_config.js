@@ -17,7 +17,11 @@ const passportJwtOptions =
 const strategy = new JwtStrategy(passportJwtOptions, async (payload, done) =>
 {
     const rows = await database.getUserByEmail(payload.sub, database.passport_err_handler(done));
-    return done(null, rows.length > 0)
+    if(rows.length > 0)
+    {
+        return done(null, rows[0]);
+    }
+    return done(null, false, {message: 'What is this'});
 });
 
 function initializePassport(passport)
