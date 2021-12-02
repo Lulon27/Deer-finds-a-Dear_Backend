@@ -116,6 +116,19 @@ async function logInUser(body, res, user)
 
 router.post('/login', async (req, res) =>
 {
+    validator = new Validator();
+    
+    validator.addString('email', 0, 64, true);
+    validator.addString('password', 0, 64, true);
+
+    validator.validate(req.body);
+
+    if(validator.hasErrors)
+    {
+        res.status(422).json(validator.makeErrorJSON());
+        return;
+    }
+
     const rows = await database.getUserByEmail(req.body.email, database.default_err_handler(res));
     if (rows === undefined || rows.length == 0)
     {
