@@ -1,192 +1,37 @@
 const server = require('../../server');
+const database = require('../../database');
 const express = require('express');
 const passport = require('passport');
 const bcrypt = require('bcrypt');
 const jwt_util = require('../../jwt_util');
 const JSONResponseBuilder = require('../../json_response_builder');
+const Responses = require('../../responses');
+const Validator = require('../../validator');
 
 const router = express.Router()
 
-const countries =
-[
-    'Germany'
-]
-
-function validateEmail(email)
-{
-    const re = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
-    return re.test(email);
-  }
-
-class RegProcessor
-{
-    constructor()
-    {
-        this.responseBuilder = new JSONResponseBuilder();
-        this.toCheck = [];
-    }
-
-    addString(toCheck, min, max, mandatory)
-    {
-        this.toCheck.push(
-        {
-            name: toCheck,
-            type: 'String',
-            min: min,
-            max: max,
-            mandatory: mandatory
-        });
-    }
-
-    addDate(toCheck, minAge, mandatory)
-    {
-        this.toCheck.push(
-        {
-            name: toCheck,
-            type: 'Date',
-            minAge: minAge,
-            mandatory: mandatory
-        });
-    }
-
-    addEmail(toCheck, mandatory)
-    {
-        this.toCheck.push(
-        {
-            name: toCheck,
-            type: 'Email',
-            mandatory: mandatory
-        });
-    }
-
-    addCountry(toCheck, mandatory)
-    {
-        this.toCheck.push(
-        {
-            name: toCheck,
-            type: 'Country',
-            mandatory: mandatory
-        });
-    }
-
-    validate(body)
-    {
-        var bodyAttr;
-        this.toCheck.forEach(elem =>
-        {
-            bodyAttr = body[elem.name];
-            if(bodyAttr === undefined || bodyAttr.trim() === "")
-            {
-                if(elem.mandatory)
-                {
-                    console.log(elem)
-                    this.responseBuilder.addMsg(101, `${elem.name} is required.`, `validation.${elem.name}.req`, elem.name);
-                    this.responseBuilder.error = true;
-                }
-                return;
-            }
-            switch (elem.type)
-            {
-                case 'String':
-                    
-                    if(bodyAttr.length < elem.min || bodyAttr.length > elem.max)
-                    {
-                        this.responseBuilder.addMsg(
-                            101,
-                            `"${elem.name}" length is not in range [${elem.min},${elem.max}].`,
-                            `validation.${elem.name}.invalid`,
-                            elem.min,
-                            elem.max);
-                        this.responseBuilder.error = true;
-                        return;
-                    }
-                    break;
-
-                case 'Date':
-                    
-                    var date = new Date(bodyAttr);
-                    if(date == 'Invalid Date' || isNaN(Date.parse(bodyAttr)))
-                    {
-                        this.responseBuilder.addMsg(101, `"${bodyAttr}" (${elem.name}) is not a valid date.`, `validation.${elem.name}.invalid`, bodyAttr, elem.name);
-                        this.responseBuilder.error = true;
-                        return;
-                    }
-                    var today = new Date();
-                    var age = today.getFullYear() - date.getFullYear();
-                    var m = today.getMonth() - date.getMonth();
-                    if (m < 0 || (m === 0 && today.getDate() < date.getDate()))
-                    {
-                        age--;
-                    }
-                    if(age < elem.minAge)
-                    {
-                        this.responseBuilder.addMsg(101, `You (${age}) must be at least ${elem.minAge} years old.`, `validation.${elem.name}.invalid`, age, elem.minAge);
-                        this.responseBuilder.error = true;
-                        return;
-                    }
-                    break;
-                
-                case 'Email':
-                    
-                    if(!validateEmail(bodyAttr))
-                    {
-                        this.responseBuilder.addMsg(101, `"${bodyAttr}" (${elem.name}) is not a valid email.`, `validation.${elem.name}.invalid`, bodyAttr, elem.name);
-                        this.responseBuilder.error = true;
-                        return;
-                    }
-                    break;
-
-                case 'Country':
-                
-                    if(countries.findIndex(x => x === bodyAttr) === -1)
-                    {
-                        this.responseBuilder.addMsg(101, `"${bodyAttr}" (${elem.name}) is not a country.`, `validation.${elem.name}.invalid`, bodyAttr, elem.name);
-                        this.responseBuilder.error = true;
-                        return;
-                    }
-                    break;
-
-                default:
-                    break;
-            }
-        });
-    }
-
-    get hasErrors()
-    {
-        return this.responseBuilder.error;
-    }
-
-    makeErrorJSON()
-    {
-        return this.responseBuilder.get();
-    }
-}
-
-router.get('/', passport.authenticate('jwt', {session: false}),(req, res) =>
+router.get('/', async (req, res) =>
 {
     try
     {
-        server.getDatabasePool().query('SELECT * FROM customer').then((rows) =>
-        {
-            res.status(200).send(rows);
-        })
+        rows = await database.getUsersWithProfiles(database.default_err_handler(res));
+        Responses.sendResponseWithField(res, Responses.OK, 'rows', rows);
     }
     catch(e)
     {
         console.log(e);
-        res.status(500).json(new JSONResponseBuilder(true).addMsg(0, 'Error', 'error.internal_server_error').get());
+        Responses.sendResponse(res, Responses.INTERNAL_ERROR);
     }
 })
 
-router.post('/', (req, res) =>
+router.post('/', async (req, res) =>
 {
     try
     {
         console.log(req.protocol)
         //TODO only https?
 
-        validator = new RegProcessor();
+        validator = new Validator();
         
         validator.addString('first_name', 1, 64, true);
         validator.addString('last_name', 1, 64, true);
@@ -204,88 +49,225 @@ router.post('/', (req, res) =>
             return;
         }
 
-        server.getDatabasePool().query(
-            `
-            SELECT email FROM customer WHERE email = '${req.body.email}' LIMIT 1
-            `
-        ).then(async(rows) =>
+        const isRegistered = await database.isUserRegistered(req.body.email, database.default_err_handler(res))
+        if (isRegistered)
         {
-            if (rows !== undefined && rows.length > 0)
-            {
-                res.status(409).json(new JSONResponseBuilder(true).addMsg(1, `${req.body.email} is already registered.`, 'validation.email.taken', req.body.email).get());
-                return;
-            }
-
-            const salt = await bcrypt.genSalt()
-            const hashedPassword = await bcrypt.hash(req.body.password, salt)
-
-            server.getDatabasePool().query(
-                `
-                INSERT INTO customer
-                (email, password, phone_number, first_name, last_name, registration_date, date_of_birth)
-                VALUES(
-                    '${req.body.email}',
-                    '${hashedPassword}',
-                    '${req.body.phone_number}',
-                    '${req.body.first_name}',
-                    '${req.body.last_name}',
-                    '2021-11-07', '1970-01-01'
-                )
-                `
-            ).then((rows) =>
-            {
-                const jwt = jwt_util.makeJWT(req.body.email);
-                res.status(201).json(new JSONResponseBuilder().addField('jwt', jwt).get());
-
-            }).catch((err) =>
-            {
-                console.log('Database query error')
-                console.log(err);
-                res.status(500).json(new JSONResponseBuilder(true).addMsg(0, 'Database query error', 'error.internal_server_error').get());
-            })
-        })
+            Responses.sendResponse(res, Responses.EMAIL_ALREADY_REGISTERED, req.body.email);
+            return;
+        }
+        registerUser(req.body, res);
     }
     catch(e)
     {
-        console.log("Error", e.stack);
-        console.log("Error", e.name);
-        console.log("Error", e.message);
-        res.status(500).json(new JSONResponseBuilder(true).addMsg(0, 'Error', 'error.internal_server_error').get());
+        console.log("Error", e);
+        Responses.sendResponse(res, Responses.INTERNAL_ERROR);
     }
 })
 
-router.post('/login', (req, res) =>
+router.patch('/', passport.authenticate('jwt', {session: false}), async (req, res) =>
 {
-    server.getDatabasePool().query(`SELECT password FROM customer WHERE email='${req.body.email}' LIMIT 1`).then(async (rows) =>
+    try
     {
-        if(!rows[0])
+        const validator = new Validator();
+        
+        validator.addString('first_name', 1, 64, false);
+        validator.addString('last_name', 1, 64, false);
+        validator.addDate('date_of_birth', 18, false);
+        validator.addEmail('email', false);
+        validator.addString('phone_number', 1, 16, false);
+        validator.addString('password', 6, 64, false);
+
+        validator.validate(req.body);
+
+        if(validator.hasErrors)
         {
-            res.status(401).json(new JSONResponseBuilder(true).addMsg(3, 'Invalid credentials', 'invalid_credentials').get());
+            res.status(422).json(validator.makeErrorJSON());
             return;
         }
-        try
+
+        //===== VALIDATOR FOR PROFILE INFO=====
+        //=======REMOVE IN NEXT ITERATION=====
+        //TODO: check if email is already in use
+
+        if(req.body.description !== undefined && req.user.profile_id === null)
         {
-            if(await bcrypt.compare(req.body.password, rows[0].password))
+            Responses.sendResponse(res, Responses.USER_HAS_NO_PROFILE);
+            return;
+        }
+
+        const profileValidator = new Validator();
+        profileValidator.addString('description', 0, 255, false);
+
+        profileValidator.validate(req.body);
+
+        if(profileValidator.hasErrors)
+        {
+            res.status(422).json(profileValidator.makeErrorJSON());
+            return;
+        }
+
+        //======================================
+
+        let set_fields = [];
+
+        const validatedFields = validator.getFields();
+
+        for (let i = 0; i < validatedFields.length; i++)
+        {
+            const field = validatedFields[i];
+            if(field.submitted)
             {
-                console.log(rows[0].password)
-                const jwt = jwt_util.makeJWT(req.body.email);
-                res.status(200).json(new JSONResponseBuilder().addField('jwt', jwt).get());
-            }
-            else
-            {
-                res.status(401).json(new JSONResponseBuilder(true).addMsg(3, 'Invalid credentials', 'invalid_credentials').get());
+                if(field.name === 'date_of_birth')
+                {
+                    set_fields.push({name: field.name, value: new Date(req.body[field.name]).toISOString().split('T')[0]});
+                }
+                else if(field.name === 'password')
+                {
+                    try
+                    {
+                        await (async () =>
+                        {
+                            const salt = await bcrypt.genSalt();
+                            const hashedPassword = await bcrypt.hash(req.body[field.name], salt);
+                            set_fields.push({name: field.name, value: hashedPassword});
+                        })();
+                    }
+                    catch(err)
+                    {
+                        console.log(err);
+                        Responses.sendResponse(res, Responses.INTERNAL_ERROR);
+                        return;
+                    }
+                }
+                else
+                {
+                    set_fields.push({name: field.name, value: req.body[field.name]});
+                }
             }
         }
-        catch(e)
+
+        if(set_fields.length != 0)
         {
-            console.log(e);
-            res.status(500).json(new JSONResponseBuilder(true).addMsg(0, 'Error', 'error.internal_server_error').get());
+            await database.updateUserPersonalData(req.user.email, set_fields, database.default_err_handler(res));
         }
-    }).catch((err) =>
+
+        if(profileValidator.getFields()[0].submitted)
+        {
+            set_fields =
+            [
+                {
+                    name: 'description',
+                    value: req.body.description
+                }
+            ];
+            await database.updateUserProfile(req.user.profile_id, set_fields, database.default_err_handler(res));
+        }
+
+        Responses.sendResponse(res, Responses.OK);
+    }
+    catch(e)
     {
-        console.log('Database query error')
-        console.log(err)
-        res.status(500).json(new JSONResponseBuilder(true).addMsg(0, 'Database error', 'error.internal_server_error').get());
-    })
+        console.log(e);
+        Responses.sendResponse(res, Responses.INTERNAL_ERROR);
+    }
 })
+
+async function registerUser(body, res)
+{
+    const salt = await bcrypt.genSalt()
+    const hashedPassword = await bcrypt.hash(body.password, salt)
+
+    const profile_id = await database.newProfile(database.default_err_handler(res));
+
+    database.newUser(
+        body.email,
+        hashedPassword,
+        body.phone_number,
+        body.first_name,
+        body.last_name,
+        new Date(body.date_of_birth).toISOString().split('T')[0],
+        profile_id,
+        database.default_err_handler(res));
+    
+    const jwt = jwt_util.makeJWT(body.email);
+    Responses.sendResponseWithField(res, Responses.CREATED, 'user',
+    {
+        profile_id: profile_id,
+        jwt: jwt
+    });
+}
+
+async function logInUser(body, res, user)
+{
+    try
+    {
+        if(await bcrypt.compare(body.password, user.password))
+        {
+            const jwt = jwt_util.makeJWT(body.email);
+            Responses.sendResponseWithField(res, Responses.OK, 'user',
+            {
+                profile_id: user.profile_id,
+                jwt: jwt
+            });
+        }
+        else
+        {
+            Responses.sendResponse(res, Responses.INVALID_CREDENTIALS);
+        }
+    }
+    catch(e)
+    {
+        console.log(e);
+        Responses.sendResponse(res, Responses.INTERNAL_ERROR);
+    }
+}
+
+router.post('/login', async (req, res) =>
+{
+    validator = new Validator();
+    
+    validator.addString('email', 0, 64, true);
+    validator.addString('password', 0, 64, true);
+
+    validator.validate(req.body);
+
+    if(validator.hasErrors)
+    {
+        res.status(422).json(validator.makeErrorJSON());
+        return;
+    }
+
+    const rows = await database.getUserByEmail(req.body.email, database.default_err_handler(res));
+    if (rows === undefined || rows.length == 0)
+    {
+        Responses.sendResponse(res, Responses.INVALID_CREDENTIALS);
+        return;
+    }
+    logInUser(req.body, res, rows[0]);
+})
+
+router.get('/:profile_id', passport.authenticate('jwt', {session: false}), async (req, res) =>
+{
+    const requestID = req.user.profile_id;
+    const targetID = req.params.profile_id;
+
+    let visitedUser;
+    
+    if(requestID == targetID) 
+    {
+        visitedUser = await database.getUserByProfileIDHome(targetID, database.default_err_handler(res));
+    }
+    else
+    {
+        visitedUser = await database.getUserByProfileIDGuest(targetID, database.default_err_handler(res));
+    }
+    if(visitedUser === undefined || visitedUser.length == 0)
+    {
+        Responses.sendResponse(res, Responses.USER_NOT_FOUND, targetID);
+        return;
+    }
+    
+    Responses.sendResponseWithField(res, Responses.OK, "user", visitedUser);
+});
+
 module.exports = router;
