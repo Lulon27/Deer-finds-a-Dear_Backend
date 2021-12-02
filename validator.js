@@ -79,6 +79,11 @@ class Validator
         });
     }
 
+    getFields()
+    {
+        return this.toCheck;
+    }
+
     validate(body)
     {
         var bodyAttr;
@@ -98,8 +103,10 @@ class Validator
                 {
                     body[elem.name] = "";
                 }
+                elem.submitted = false;
                 return;
             }
+            elem.submitted = true;
             switch (elem.type)
             {
                 case 'String':

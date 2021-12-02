@@ -8,6 +8,7 @@ class Responses
     static INVALID_CREDENTIALS = new Responses(true, 3, 401, 'Invalid credentials', 'validation.invalid_credentials');
     static EMAIL_ALREADY_REGISTERED = new Responses(true, 1, 409, '{0} is already registered.', 'validation.email_taken');
     static USER_NOT_FOUND = new Responses(true, 1, 404, 'User with profile_id {0} does not exist.', 'user.not_found');
+    static USER_HAS_NO_PROFILE = new Responses(true, 1, 409, 'User with email {0} has no profile.', 'user.no_profile');
 
     constructor(error, internalCode, httpCode, debugStr, translStr)
     {

@@ -64,6 +64,114 @@ router.post('/', async (req, res) =>
     }
 })
 
+router.patch('/', passport.authenticate('jwt', {session: false}), async (req, res) =>
+{
+    try
+    {
+        const validator = new Validator();
+        
+        validator.addString('first_name', 1, 64, false);
+        validator.addString('last_name', 1, 64, false);
+        validator.addDate('date_of_birth', 18, false);
+        validator.addEmail('email', false);
+        validator.addString('phone_number', 1, 16, false);
+        validator.addString('password', 6, 64, false);
+
+        validator.validate(req.body);
+
+        if(validator.hasErrors)
+        {
+            res.status(422).json(validator.makeErrorJSON());
+            return;
+        }
+
+        //===== VALIDATOR FOR PROFILE INFO=====
+        //=======REMOVE IN NEXT ITERATION=====
+        //TODO: check if email is already in use
+
+        if(req.body.description !== undefined && req.user.profile_id === null)
+        {
+            Responses.sendResponse(res, Responses.USER_HAS_NO_PROFILE);
+            return;
+        }
+
+        const profileValidator = new Validator();
+        profileValidator.addString('description', 0, 255, false);
+
+        profileValidator.validate(req.body);
+
+        if(profileValidator.hasErrors)
+        {
+            res.status(422).json(profileValidator.makeErrorJSON());
+            return;
+        }
+
+        //======================================
+
+        let set_fields = [];
+
+        const validatedFields = validator.getFields();
+
+        for (let i = 0; i < validatedFields.length; i++)
+        {
+            const field = validatedFields[i];
+            if(field.submitted)
+            {
+                if(field.name === 'date_of_birth')
+                {
+                    set_fields.push({name: field.name, value: new Date(req.body[field.name]).toISOString().split('T')[0]});
+                }
+                else if(field.name === 'password')
+                {
+                    try
+                    {
+                        await (async () =>
+                        {
+                            const salt = await bcrypt.genSalt();
+                            const hashedPassword = await bcrypt.hash(req.body[field.name], salt);
+                            set_fields.push({name: field.name, value: hashedPassword});
+                        })();
+                    }
+                    catch(err)
+                    {
+                        console.log(err);
+                        Responses.sendResponse(res, Responses.INTERNAL_ERROR);
+                        return;
+                    }
+                }
+                else
+                {
+                    set_fields.push({name: field.name, value: req.body[field.name]});
+                }
+            }
+        }
+
+        if(set_fields.length != 0)
+        {
+            await database.updateUserPersonalData(req.user.email, set_fields, database.default_err_handler(res));
+        }
+
+        if(profileValidator.getFields()[0].submitted)
+        {
+            set_fields =
+            [
+                {
+                    name: 'description',
+                    value: req.body.description
+                }
+            ];
+            await database.updateUserProfile(req.user.profile_id, set_fields, database.default_err_handler(res));
+        }
+
+        Responses.sendResponse(res, Responses.OK);
+    }
+    catch(e)
+    {
+        console.log(e);
+        Responses.sendResponse(res, Responses.INTERNAL_ERROR);
+    }
+})
+
 async function registerUser(body, res)
 {
     const salt = await bcrypt.genSalt()

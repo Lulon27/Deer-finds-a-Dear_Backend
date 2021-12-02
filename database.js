@@ -201,6 +201,53 @@ function newUser(email, pw, phone, firstName, lastName, dob, profile_id, errorHa
     errorHandler);
 }
 
+function generateSetClause(fields)
+{
+    let setClause = 'SET ';
+    let values = [];
+    for (let i = 0; i < fields.length; i++)
+    {
+        const field = fields[i];
+        setClause += field.name + '=?';
+        if(i < fields.length - 1)
+        {
+            setClause += ",";
+        }
+        values.push(field.value);
+    }
+    return {
+        str: setClause,
+        values: values
+    }
+}
+
+async function updateUserPersonalData(email, fields, errorHandler)
+{
+    setClause = generateSetClause(fields);
+    setClause.values.push(email);
+    
+    return await doQuery(
+        'UPDATE customer ' +
+        setClause.str +
+        ' WHERE email = ?',
+        setClause.values,
+        errorHandler);
+    
+}
+
+async function updateUserProfile(profile_id, fields, errorHandler)
+{
+    setClause = generateSetClause(fields);
+    setClause.values.push(profile_id);
+    
+    return await doQuery(
+        'UPDATE profile_customer ' +
+        setClause.str +
+        ' WHERE profile_id = ?',
+        setClause.values,
+        errorHandler);
+}
+
 async function newProfile(errorHandler)
 {
     const result = await doQuery('INSERT INTO profile_customer VALUES()', errorHandler);
@@ -220,6 +267,8 @@ module.exports.isUserRegistered = isUserRegistered;
 module.exports.authenticateUser = authenticateUser;
 module.exports.newUser = newUser;
 module.exports.newProfile = newProfile;
+module.exports.updateUserPersonalData = updateUserPersonalData;
+module.exports.updateUserProfile = updateUserProfile;
 
 module.exports.default_err_handler = default_err_handler;
 module.exports.function_err_handler = function_err_handler;
