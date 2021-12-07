@@ -246,6 +246,13 @@ router.post('/login', async (req, res) =>
     logInUser(req.body, res, rows[0]);
 })
 
+router.get('/search', passport.authenticate('jwt', {session: false}), async (req, res) =>
+{
+    const users = await database.getUsersExcludeWithReducedInfo(req.user.profile_id, database.default_err_handler(res));
+    
+    Responses.sendResponseWithField(res, Responses.OK, "users", users);
+});
+
 router.get('/:profile_id', passport.authenticate('jwt', {session: false}), async (req, res) =>
 {
     const requestID = req.user.profile_id;
