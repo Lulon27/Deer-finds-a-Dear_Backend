@@ -97,6 +97,20 @@ function getUsers(errorHandler)
     return doQuery('SELECT * FROM customer LIMIT 200', [], errorHandler);
 }
 
+function getUsersExcludeWithReducedInfo(excludeID, errorHandler)
+{
+    return doQuery(
+    `SELECT
+    profile_customer.profile_id, 
+    first_name,
+    last_name,
+    last_online
+    FROM customer
+    INNER JOIN profile_customer
+    ON customer.profile_id = profile_customer.profile_id
+   	AND customer.profile_id != ?;`, [excludeID], errorHandler);
+}
+
 function getUsersWithProfiles(errorHandler)
 {
     return doQuery(
@@ -258,6 +272,7 @@ module.exports.getPool = getPool;
 
 module.exports.getUsers = getUsers;
 module.exports.getUsersWithProfiles = getUsersWithProfiles;
+module.exports.getUsersExcludeWithReducedInfo = getUsersExcludeWithReducedInfo;
 module.exports.getUserByEmail = getUserByEmail;
 module.exports.getUserByProfileID = getUserByProfileID;
 module.exports.getUserByProfileIDHome = getUserByProfileIDHome;
